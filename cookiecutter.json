@@ -1,0 +1,9 @@
+{
+  "project_name_full": "",
+  "project_name": "{{ cookiecutter.project_name_full.lower().replace(' ', '-') }}",
+  "project_short_description": "",
+  "author_name": "",
+  "author_handle": "",
+  "author_link": "",
+  "git_init": true
+}

@@ -1,6 +1,5 @@
 import os
 import subprocess
-import re
 
 {% if cookiecutter.git_init -%}
 try:
@@ -12,6 +11,6 @@ except subprocess.CalledProcessError as e:
 
 os.rename('.gitignore.tmp', '.gitignore')
 
-author_id = re.sub(r"^@", '', '{{ cookiecutter.author_handle }}')
+author_id = '{{ cookiecutter.author_id }}'
 project_name = '{{ cookiecutter.project_name }}'
 subprocess.run(['go', 'mod', 'init', f"github.com/{author_id}/{project_name}"], check=True, cwd="src")

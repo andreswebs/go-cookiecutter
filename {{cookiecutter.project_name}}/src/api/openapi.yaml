@@ -1,0 +1,74 @@
+---
+openapi: 3.1.0
+info:
+  title: API
+  description: Backend API.
+  version: 0.1.0
+  license:
+    name: proprietary
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /livez:
+    get:
+      summary: Liveness check
+      description: |
+        Returns 200 if the process can handle HTTP requests.
+        No dependency checks — fast and side-effect-free.
+        Kubernetes uses this to decide whether to restart the container.
+      operationId: health_liveness
+      tags:
+        - health
+      responses:
+        "200":
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+
+  /readyz:
+    get:
+      summary: Readiness check
+      description: |
+        Returns 200 if the service can serve requests (critical dependencies
+        are available). Returns 503 if a critical dependency is down.
+        Checks catalog database connectivity only.
+      operationId: health_readiness
+      tags:
+        - health
+      responses:
+        "200":
+          description: Service is ready to serve requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+        "503":
+          description: Service is not ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: unavailable
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          description: Health status indicator.
+          examples:
+            - ok

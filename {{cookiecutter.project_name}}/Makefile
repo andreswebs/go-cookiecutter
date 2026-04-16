@@ -1,39 +1,100 @@
-APP_NAME   := app
-SRC_DIR    := $(CURDIR)/src
-BIN_DIR    := $(CURDIR)/bin
-APP_FILE   := $(BIN_DIR)/$(APP_NAME)
-CMD_DIR    := ./cmd/server
-IMAGE_NAME := {{ cookiecutter.author_id }}/{{ cookiecutter.project_name }}
+APP_NAME    := {{ cookiecutter.project_name }}
+SRC_DIR     := $(CURDIR)/src
+BIN_DIR     := $(CURDIR)/bin
+DIST_DIR    := $(CURDIR)/dist
+CMD_DIR     := ./cmd/server
+VERSION     ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo v0.0.0-dev)
+LDFLAGS     := -s -w
+HOST_OS     := $(shell go env GOOS)
+HOST_ARCH   := $(shell go env GOARCH)
+LOCAL_BIN   := $(BIN_DIR)/$(APP_NAME)-$(HOST_OS)-$(HOST_ARCH)
+IMAGE_NAME  := {{ cookiecutter.author_id }}/{{ cookiecutter.project_name }}
 
-.PHONY: build test test-race vet fmt fmt-check lint clean run container
+PLATFORMS := linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64 windows-arm64
 
-build: fmt-check vet lint test clean
+.PHONY: help build build-all build-local dist \
+        test test-race vet fmt fmt-check lint validate \
+        clean clean-local clean-dist run container \
+        $(addprefix build-,$(PLATFORMS))
+
+help: ## List available targets
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+build: validate clean-local build-local ## Build for current platform
+
+build-all: validate clean $(addprefix build-,$(PLATFORMS)) ## Build for all platforms
+
+build-local: | $(BIN_DIR) ## Build local binary
+	cd $(SRC_DIR) && CGO_ENABLED=0 GOOS=$(HOST_OS) GOARCH=$(HOST_ARCH) go build -ldflags="$(LDFLAGS)" -o $(LOCAL_BIN) $(CMD_DIR)
+
+define build-target
+build-$(1)-$(2): | $(BIN_DIR)
+	cd $(SRC_DIR) && CGO_ENABLED=0 GOOS=$(1) GOARCH=$(2) go build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(APP_NAME)-$(1)-$(2)$(3) $(CMD_DIR)
+endef
+
+$(eval $(call build-target,linux,amd64,))
+$(eval $(call build-target,linux,arm64,))
+$(eval $(call build-target,darwin,amd64,))
+$(eval $(call build-target,darwin,arm64,))
+$(eval $(call build-target,windows,amd64,.exe))
+$(eval $(call build-target,windows,arm64,.exe))
+
+$(BIN_DIR):
 	mkdir -p $(BIN_DIR)
-	cd $(SRC_DIR) && go build -o $(APP_FILE) $(CMD_DIR)
 
-run:
-	cd $(SRC_DIR) && go run $(CMD_DIR)
+$(DIST_DIR):
+	mkdir -p $(DIST_DIR)
 
-test:
+dist: build-all | $(DIST_DIR) ## Package cross-platform archives into dist/
+	@set -e; \
+	rm -f $(DIST_DIR)/*.tar.gz $(DIST_DIR)/*.zip $(DIST_DIR)/SHA256SUMS.txt; \
+	for p in $(PLATFORMS); do \
+	  os=$${p%-*}; arch=$${p#*-}; \
+	  ext=""; [ "$$os" = "windows" ] && ext=".exe"; \
+	  stage="$(DIST_DIR)/$(APP_NAME)-$$os-$$arch-$(VERSION)"; \
+	  rm -rf "$$stage" && mkdir -p "$$stage"; \
+	  cp "$(BIN_DIR)/$(APP_NAME)-$$os-$$arch$$ext" "$$stage/$(APP_NAME)$$ext"; \
+	  cp LICENSE README.md "$$stage/"; \
+	  if [ "$$os" = "windows" ]; then \
+	    (cd "$(DIST_DIR)" && zip -rq "$$stage.zip" "$$(basename $$stage)"); \
+	  else \
+	    tar -C "$(DIST_DIR)" -czf "$$stage.tar.gz" "$$(basename $$stage)"; \
+	  fi; \
+	  rm -rf "$$stage"; \
+	done; \
+	cd $(DIST_DIR) && shasum -a 256 *.tar.gz *.zip > SHA256SUMS.txt
+
+run: ## Run locally with build flags
+	cd $(SRC_DIR) && go run -ldflags="$(LDFLAGS)" $(CMD_DIR)
+
+test: ## Run tests
 	cd $(SRC_DIR) && go test ./...
 
-test-race:
+test-race: ## Run tests with race detector
 	cd $(SRC_DIR) && go test -race ./...
 
-vet:
+vet: ## Run go vet
 	cd $(SRC_DIR) && go vet ./...
 
-fmt:
+fmt: ## Format Go code
 	cd $(SRC_DIR) && gofmt -w .
 
-fmt-check:
+fmt-check: ## Check Go formatting
 	@cd $(SRC_DIR) && test -z "$$(gofmt -l .)" || (echo "files not formatted:"; gofmt -l .; exit 1)
 
-lint: vet
+lint: ## Run linter
 	cd $(SRC_DIR) && golangci-lint run ./...
 
-clean:
-	@[ -d "$(BIN_DIR)" ] && rm -f $(BIN_DIR)/* || true
+validate: fmt-check vet lint test ## Run all checks
 
-container: fmt-check vet lint test
+clean-local: ## Remove local binary
+	rm -f $(LOCAL_BIN)
+
+clean-dist: ## Remove dist/ artifacts
+	@[ -d "$(DIST_DIR)" ] && rm -f $(DIST_DIR)/*.tar.gz $(DIST_DIR)/*.zip $(DIST_DIR)/SHA256SUMS.txt || true
+
+clean: clean-dist ## Remove all build artifacts
+	@[ -d "$(BIN_DIR)" ] && rm -f $(BIN_DIR)/$(APP_NAME)-* || true
+
+container: validate ## Build container image
 	docker build --tag $(IMAGE_NAME) .

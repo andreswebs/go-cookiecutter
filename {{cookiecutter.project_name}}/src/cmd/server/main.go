@@ -1,3 +1,4 @@
+// Command server runs the {{ cookiecutter.project_name }} HTTP API.
 package main
 
 import (
@@ -12,6 +13,7 @@ import (
 
 	"github.com/{{ cookiecutter.author_id }}/{{ cookiecutter.project_name }}/internal/config"
 	"github.com/{{ cookiecutter.author_id }}/{{ cookiecutter.project_name }}/internal/server"
+	"github.com/{{ cookiecutter.author_id }}/{{ cookiecutter.project_name }}/internal/version"
 )
 
 const shutdownTimeout = 25 * time.Second
@@ -27,6 +29,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+
+	log.Printf("starting {{ cookiecutter.project_name }} %s", version.Current())
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	srv := server.NewServer(addr)

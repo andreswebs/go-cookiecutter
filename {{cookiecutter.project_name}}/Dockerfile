@@ -1,24 +1,26 @@
 # syntax=docker/dockerfile:1
-
-FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:{{ cookiecutter.go_version }}-alpine AS build
 
 WORKDIR /build
-COPY src/go.mod .
-COPY src/go.sum .
+# go.su[m] is an optional glob: the API shape has no third-party dependencies and
+# therefore no go.sum, while the CLI shape does.
+COPY src/go.mod src/go.su[m] ./
 RUN go mod download
 COPY src/ ./
 
 ARG TARGETOS TARGETARCH
 ENV GOOS=$TARGETOS
 ENV GOARCH=$TARGETARCH
+ARG VERSION=dev
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 go build -o app ./cmd/server
+    CGO_ENABLED=0 go build -trimpath \
+    -ldflags="-s -w -buildid= -X github.com/{{ cookiecutter.author_id }}/{{ cookiecutter.project_name }}/internal/version.Override=${VERSION}" \
+    -o {{ cookiecutter.project_name }} ./cmd/{% if cookiecutter.project_type == 'cli' %}{{ cookiecutter.project_name }}{% else %}server{% endif %}
 
 FROM alpine:latest AS runtime
 
-RUN mkdir -m 0755 -p /srv
-COPY --from=build /build/app /srv/app
+RUN apk add --no-cache ca-certificates
 
 ARG APP_UID="2000"
 ARG APP_GID="2000"
@@ -36,4 +38,10 @@ RUN \
       -s "/bin/sh" \
       "${APP_USER}"
 
-ENTRYPOINT [ "/srv/app" ]
+COPY --from=build /build/{{ cookiecutter.project_name }} /usr/local/bin/{{ cookiecutter.project_name }}
+
+USER ${APP_USER}
+{% if cookiecutter.project_type == 'api' %}
+EXPOSE 8080
+{% endif %}
+ENTRYPOINT [ "/usr/local/bin/{{ cookiecutter.project_name }}" ]

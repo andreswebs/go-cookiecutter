@@ -2,9 +2,10 @@ APP_NAME    := {{ cookiecutter.project_name }}
 SRC_DIR     := $(CURDIR)/src
 BIN_DIR     := $(CURDIR)/bin
 DIST_DIR    := $(CURDIR)/dist
-CMD_DIR     := ./cmd/server
+CMD_DIR     := ./cmd/{% if cookiecutter.project_type == 'cli' %}{{ cookiecutter.project_name }}{% else %}server{% endif %}
 VERSION     ?= $(shell git describe --tags --dirty --always 2>/dev/null || echo v0.0.0-dev)
-LDFLAGS     := -s -w
+LDFLAGS     := -s -w -buildid= -X github.com/{{ cookiecutter.author_id }}/{{ cookiecutter.project_name }}/internal/version.Override=$(VERSION)
+BUILDFLAGS  := -trimpath
 HOST_OS     := $(shell go env GOOS)
 HOST_ARCH   := $(shell go env GOARCH)
 LOCAL_BIN   := $(BIN_DIR)/$(APP_NAME)-$(HOST_OS)-$(HOST_ARCH)
@@ -14,7 +15,7 @@ PLATFORMS := linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64 win
 
 .PHONY: help build build-all build-local dist \
         test test-race vet fmt fmt-check lint validate \
-        clean clean-local clean-dist run container \
+        clean clean-local clean-dist run{% if cookiecutter.project_type == 'api' or cookiecutter.containerize == 'true' %} container{% endif %} \
         $(addprefix build-,$(PLATFORMS))
 
 help: ## List available targets
@@ -25,11 +26,11 @@ build: validate clean-local build-local ## Build for current platform
 build-all: validate clean $(addprefix build-,$(PLATFORMS)) ## Build for all platforms
 
 build-local: | $(BIN_DIR) ## Build local binary
-	cd $(SRC_DIR) && CGO_ENABLED=0 GOOS=$(HOST_OS) GOARCH=$(HOST_ARCH) go build -ldflags="$(LDFLAGS)" -o $(LOCAL_BIN) $(CMD_DIR)
+	cd $(SRC_DIR) && CGO_ENABLED=0 GOOS=$(HOST_OS) GOARCH=$(HOST_ARCH) go build $(BUILDFLAGS) -ldflags="$(LDFLAGS)" -o $(LOCAL_BIN) $(CMD_DIR)
 
 define build-target
 build-$(1)-$(2): | $(BIN_DIR)
-	cd $(SRC_DIR) && CGO_ENABLED=0 GOOS=$(1) GOARCH=$(2) go build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(APP_NAME)-$(1)-$(2)$(3) $(CMD_DIR)
+	cd $(SRC_DIR) && CGO_ENABLED=0 GOOS=$(1) GOARCH=$(2) go build $(BUILDFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(APP_NAME)-$(1)-$(2)$(3) $(CMD_DIR)
 endef
 
 $(eval $(call build-target,linux,amd64,))
@@ -54,7 +55,7 @@ dist: build-all | $(DIST_DIR) ## Package cross-platform archives into dist/
 	  stage="$(DIST_DIR)/$(APP_NAME)-$$os-$$arch-$(VERSION)"; \
 	  rm -rf "$$stage" && mkdir -p "$$stage"; \
 	  cp "$(BIN_DIR)/$(APP_NAME)-$$os-$$arch$$ext" "$$stage/$(APP_NAME)$$ext"; \
-	  cp LICENSE README.md "$$stage/"; \
+	  cp UNLICENSE README.md "$$stage/"; \
 	  if [ "$$os" = "windows" ]; then \
 	    (cd "$(DIST_DIR)" && zip -rq "$$stage.zip" "$$(basename $$stage)"); \
 	  else \
@@ -62,10 +63,10 @@ dist: build-all | $(DIST_DIR) ## Package cross-platform archives into dist/
 	  fi; \
 	  rm -rf "$$stage"; \
 	done; \
-	cd $(DIST_DIR) && shasum -a 256 *.tar.gz *.zip > SHA256SUMS.txt
+	cd $(DIST_DIR) && shasum -a 256 $$(ls *.tar.gz *.zip 2>/dev/null) > SHA256SUMS.txt
 
 run: ## Run locally with build flags
-	cd $(SRC_DIR) && go run -ldflags="$(LDFLAGS)" $(CMD_DIR)
+	cd $(SRC_DIR) && go run $(BUILDFLAGS) -ldflags="$(LDFLAGS)" $(CMD_DIR)
 
 test: ## Run tests
 	cd $(SRC_DIR) && go test ./...
@@ -95,6 +96,7 @@ clean-dist: ## Remove dist/ artifacts
 
 clean: clean-dist ## Remove all build artifacts
 	@[ -d "$(BIN_DIR)" ] && rm -f $(BIN_DIR)/$(APP_NAME)-* || true
-
+{% if cookiecutter.project_type == 'api' or cookiecutter.containerize == 'true' %}
 container: validate ## Build container image
-	docker build --tag $(IMAGE_NAME) .
+	docker build --build-arg VERSION=$(VERSION) --tag $(IMAGE_NAME) .
+{% endif %}

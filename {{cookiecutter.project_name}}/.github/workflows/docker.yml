@@ -1,0 +1,133 @@
+---
+name: docker.io
+
+on:
+  workflow_dispatch: {}
+
+  push:
+    branches:
+      - main
+
+  schedule:
+    - cron: 0 0 * * 0
+
+permissions:
+  contents: read
+  # Keyless cosign signing and attest-build-provenance exchange this OIDC token
+  # with Sigstore's Fulcio for a short-lived signing certificate.
+  id-token: write
+  # attest-build-provenance persists SLSA build provenance to the GitHub
+  # attestations API for the pushed image.
+  attestations: write
+
+jobs:
+  dockerhub:
+    runs-on: ubuntu-latest
+
+    env:
+      CONTAINER_REGISTRY: docker.io
+      CONTAINER_REPOSITORY: {{ cookiecutter.author_id }}/{{ cookiecutter.project_name }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          flavor: |
+            latest=true
+            prefix=
+            suffix=
+          tags: |
+            type=sha
+            type=sha,format=long
+          images: |
+            {%- raw %}
+            ${{ env.CONTAINER_REGISTRY }}/${{ env.CONTAINER_REPOSITORY }}
+            {%- endraw %}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          {%- raw %}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          {%- endraw %}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          # Disable BuildKit's own attestations; provenance and SBOM are attached
+          # below via cosign so the image keeps a single, stable digest to sign.
+          provenance: false
+          build-args: |
+            {%- raw %}
+            VERSION=${{ github.ref_name }}
+            {%- endraw %}
+          {%- raw %}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          {%- endraw %}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Keyless-sign the image by digest. Signing the digest (not a mutable tag)
+      # pins the signature to exactly what was built.
+      - name: Sign image
+        {%- raw %}
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.CONTAINER_REPOSITORY }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        {%- endraw %}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Attest build provenance
+        {%- raw %}
+        if: ${{ github.event_name != 'pull_request' }}
+        {%- endraw %}
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          {%- raw %}
+          subject-name: ${{ env.CONTAINER_REGISTRY }}/${{ env.CONTAINER_REPOSITORY }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          {%- endraw %}
+          push-to-registry: true
+
+      # SYFT_SOURCE_* names the SBOM's root package explicitly instead of the
+      # scanned reference.
+      - name: Generate SBOM
+        {%- raw %}
+        if: ${{ github.event_name != 'pull_request' }}
+        {%- endraw %}
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        env:
+          SYFT_SOURCE_NAME: {{ cookiecutter.project_name }}
+          SYFT_SOURCE_VERSION: {% raw %}${{ github.ref_name }}{% endraw %}
+        with:
+          {%- raw %}
+          image: ${{ env.CONTAINER_REGISTRY }}/${{ env.CONTAINER_REPOSITORY }}@${{ steps.build.outputs.digest }}
+          {%- endraw %}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+
+      # Attach the SBOM to the image as a signed cosign attestation, mirroring the
+      # CLI release's cosign-signed SBOM.
+      - name: Attest SBOM
+        {%- raw %}
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          IMAGE: ${{ env.CONTAINER_REGISTRY }}/${{ env.CONTAINER_REPOSITORY }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        {%- endraw %}
+        run: cosign attest --yes --type spdxjson --predicate sbom.spdx.json "${IMAGE}@${DIGEST}"

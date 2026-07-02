@@ -2,9 +2,29 @@
   "project_name_full": "",
   "project_name": "{{ cookiecutter.project_name_full.lower().replace(' ', '-') }}",
   "project_short_description": "",
+  "project_type": ["cli", "api"],
+  "containerize": "{{ 'true' if cookiecutter.project_type == 'api' else 'false' }}",
+  "go_version": "1.26",
   "author_name": "",
   "author_handle": "",
   "author_id": "{{ cookiecutter.author_handle.replace('@', '') }}",
   "author_link": "",
-  "git_init": true
+  "git_init": true,
+  "_copy_without_render": [".github/actions/gh-release/action.yml"],
+  "__prompts__": {
+    "project_name_full": "Human-readable project name (e.g. My Tool)",
+    "project_name": "Project slug (used for the repo, binary, and module path)",
+    "project_short_description": "One-line description",
+    "project_type": {
+      "__prompt__": "Project shape",
+      "cli": "Command-line tool (urfave/cli/v3, signed binary releases)",
+      "api": "HTTP API server (signed container image)"
+    },
+    "containerize": "Generate a Dockerfile and a signed container-publish workflow? (forced on for api)",
+    "go_version": "Go minor version for the Docker build image",
+    "author_name": "Author full name",
+    "author_handle": "Author handle (e.g. @you)",
+    "author_link": "Author profile URL",
+    "git_init": "Run 'git init' after generating?"
+  }
 }

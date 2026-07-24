@@ -4,9 +4,10 @@ FROM --platform=$BUILDPLATFORM golang:{{ cookiecutter.go_version }}-alpine AS bu
 WORKDIR /build
 # go.su[m] is an optional glob: the API shape has no third-party dependencies and
 # therefore no go.sum, while the CLI shape does.
-COPY src/go.mod src/go.su[m] ./
+COPY go.mod go.su[m] ./
 RUN go mod download
-COPY src/ ./
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
 
 ARG TARGETOS TARGETARCH
 ENV GOOS=$TARGETOS

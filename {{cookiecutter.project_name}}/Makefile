@@ -1,5 +1,5 @@
 APP_NAME    := {{ cookiecutter.project_name }}
-SRC_DIR     := $(CURDIR)/src
+SRC_DIR     := $(CURDIR)
 BIN_DIR     := $(CURDIR)/bin
 DIST_DIR    := $(CURDIR)/dist
 CMD_DIR     := ./cmd/{% if cookiecutter.project_type == 'cli' %}{{ cookiecutter.project_name }}{% else %}server{% endif %}

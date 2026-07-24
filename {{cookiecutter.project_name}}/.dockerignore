@@ -31,3 +31,6 @@
 **/*.bak.*
 *LICENSE*
 README.md
+**/docs
+**/api-spec
+**/.github

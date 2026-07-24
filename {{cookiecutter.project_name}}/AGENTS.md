@@ -1,8 +1,8 @@
 # AI agent instructions
 
 `{{ cookiecutter.project_name }}` is {{ cookiecutter.project_short_description }}.
-Go source lives under `src/`; all commands are run from the project root via
-`make`.
+Go source lives at the repository root; all commands are run from the project
+root via `make`.
 
 ## Build & validation
 

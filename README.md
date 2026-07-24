@@ -8,8 +8,9 @@ signed release pipeline.
 
 Both shapes share:
 
-- A `src/` module with an `internal/version` package whose value is stamped in at
-  build time (`-ldflags -X`), a `Makefile` quality gate (`fmt-check`, `vet`,
+- A root-level Go module with an `internal/version` package whose value is
+  stamped in at build time (`-ldflags -X`), a `Makefile` quality gate
+  (`fmt-check`, `vet`,
   `lint`, `test`), and a `golangci-lint` v2 config.
 - A `CI` workflow that runs the full `make build` gate on push and pull request.
 - Third-party GitHub Actions pinned by commit SHA, kept current by Dependabot.
@@ -21,7 +22,7 @@ Both shapes share:
 
 The `cli` shape adds an agent-first command-line tool implementing those ADRs:
 
-- A one-line `main` at `src/cmd/<project_name>/` delegating to
+- A one-line `main` at `cmd/<project_name>/` delegating to
   `internal/command`, whose `Run(args, deps) int` is the framework-free
   contract and single exit boundary; the `urfave/cli/v3` interior is confined
   to dedicated files and is replaceable.
@@ -43,7 +44,7 @@ The `cli` shape adds an agent-first command-line tool implementing those ADRs:
 
 The `api` shape adds:
 
-- An HTTP server at `src/cmd/server/` with liveness and readiness probes,
+- An HTTP server at `cmd/server/` with liveness and readiness probes,
   graceful shutdown (exiting 128 plus the signal number after a caught
   SIGINT/SIGTERM, and 78 on a configuration failure at startup), and an
   `api-spec/openapi.yaml`.

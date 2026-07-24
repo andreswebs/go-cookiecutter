@@ -22,20 +22,22 @@ def rmtree(path):
 
 # Prune the shape that was not selected.
 if PROJECT_TYPE == "cli":
-    rmtree("src/cmd/server")
-    rmtree("src/internal/config")
-    rmtree("src/internal/server")
+    rmtree("cmd/server")
+    rmtree("internal/config")
+    rmtree("internal/server")
     rmtree("api-spec")
 else:  # api
-    rmtree(os.path.join("src", "cmd", PROJECT_NAME))
+    rmtree(os.path.join("cmd", PROJECT_NAME))
     # The CLI machinery (delegate, typed errors, output contract) is CLI-only;
     # the API keeps internal/secret, which is shape-agnostic.
-    rmtree("src/internal/command")
-    rmtree("src/internal/output")
-    rmtree("src/internal/terr")
+    rmtree("internal/command")
+    rmtree("internal/output")
+    rmtree("internal/terr")
     # The signed binary-release pipeline is CLI-only.
     rm(".github/workflows/release.yml")
     rmtree(".github/actions")
+    # The SBOM exclude file pairs with the release workflow, so it is dead here.
+    rm(".syft.yaml")
 
 # Drop container assets unless the project is containerized.
 if not CONTAINERIZED:
@@ -54,9 +56,8 @@ os.rename(".gitignore.tmp", ".gitignore")
 subprocess.run(
     ["go", "mod", "init", f"github.com/{AUTHOR_ID}/{PROJECT_NAME}"],
     check=True,
-    cwd="src",
 )
-subprocess.run(["go", "mod", "tidy"], check=True, cwd="src")
+subprocess.run(["go", "mod", "tidy"], check=True)
 
 os.symlink("AGENTS.md", "CLAUDE.md")
 

@@ -14,13 +14,27 @@ Both shapes share:
 - A `CI` workflow that runs the full `make build` gate on push and pull request.
 - Third-party GitHub Actions pinned by commit SHA, kept current by Dependabot.
 - An `AGENTS.md` (symlinked to `CLAUDE.md`) describing the build and release flow.
-- A `docs/` tree for spec-driven development (`docs/adr/` seeded with the
-  family-wide exit-code taxonomy ADR, plus an empty `docs/specs/`); optional,
+- A `docs/` tree for spec-driven development (`docs/adr/` seeded with six ADRs
+  covering the exit-code taxonomy, error handling, CLI structure, logging, the
+  output contract, and CLI testing, plus an empty `docs/specs/`); optional,
   see `include_specs`.
 
-The `cli` shape adds:
+The `cli` shape adds an agent-first command-line tool implementing those ADRs:
 
-- A `urfave/cli/v3` entrypoint at `src/cmd/<project_name>/`.
+- A one-line `main` at `src/cmd/<project_name>/` delegating to
+  `internal/command`, whose `Run(args, deps) int` is the framework-free
+  contract and single exit boundary; the `urfave/cli/v3` interior is confined
+  to dedicated files and is replaceable.
+- Typed, coded errors (`internal/terr`): every failure carries a stable
+  machine code, an exit code from the taxonomy, and a remediation hint,
+  rendered as one JSON error envelope on stderr.
+- A JSON output contract (`internal/output`): every result envelope opens
+  with `schema_version` and `ok`, collections never serialize as `null`, and
+  a `schema` command self-describes the command surface, declared exit codes,
+  and error inventory at runtime.
+- A credential-redaction type (`internal/secret`).
+- A golden-triple test harness (stdout, stderr, exit code per scenario, with
+  an `-update` flag) that also enforces the declared exit-code registry.
 - A `Release` workflow triggered by `v*.*.*` tags that cross-compiles every
   platform, keyless-signs the checksums and an SPDX SBOM with
   [cosign](https://docs.sigstore.dev/), attaches SLSA build provenance with
@@ -30,7 +44,9 @@ The `cli` shape adds:
 The `api` shape adds:
 
 - An HTTP server at `src/cmd/server/` with liveness and readiness probes,
-  graceful shutdown, and an `api-spec/openapi.yaml`.
+  graceful shutdown (exiting 128 plus the signal number after a caught
+  SIGINT/SIGTERM, and 78 on a configuration failure at startup), and an
+  `api-spec/openapi.yaml`.
 - A container-publish workflow that pushes the image to Docker Hub, then
   keyless-signs it with cosign, attaches SLSA build provenance, and attaches a
   cosign-signed SPDX SBOM.

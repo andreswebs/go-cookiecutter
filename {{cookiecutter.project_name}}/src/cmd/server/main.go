@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -18,16 +19,23 @@ import (
 
 const shutdownTimeout = 25 * time.Second
 
-func main() {
-	ctx, stop := signal.NotifyContext(
-		context.Background(),
-		syscall.SIGINT, syscall.SIGTERM,
-	)
-	defer stop()
+// Exit codes: a long-running server adopts the applicable slice of the exit
+// taxonomy only. 78 (EX_CONFIG) for a configuration failure at startup, 1 for
+// a runtime server failure, and 128 plus the signal number (130 SIGINT, 143
+// SIGTERM) after a caught signal and graceful shutdown.
+const exitConfig = 78
 
+// main is the single exit boundary: run returns the exit code and every
+// deferred cleanup inside it has already executed.
+func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		log.Printf("failed to load config: %v", err)
+		return exitConfig
 	}
 
 	log.Printf("starting {{ cookiecutter.project_name }} %s", version.Current())
@@ -35,19 +43,32 @@ func main() {
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	srv := server.NewServer(addr)
 
-	// Start the server in a separate goroutine.
+	serverErr := make(chan error, 1)
 	go func() {
 		log.Printf("listening on %s", addr)
 		if err := srv.ListenAndServe(); err != nil &&
 			!errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("server error: %v", err)
+			serverErr <- err
 		}
 	}()
 
-	// Block until a termination signal is received.
-	<-ctx.Done()
-	stop() // Allow a second Ctrl+C to force-kill.
-	log.Println("shutdown signal received")
+	// Catch termination signals explicitly (not via signal.NotifyContext) so
+	// the exit code can report which signal ended the process.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	var exit int
+	select {
+	case err := <-serverErr:
+		log.Printf("server error: %v", err)
+		return 1
+	case sig := <-sigCh:
+		signal.Stop(sigCh) // Allow a second Ctrl+C to force-kill.
+		log.Printf("shutdown signal received: %v", sig)
+		// A tool that catches SIGINT/SIGTERM for graceful shutdown exits 128
+		// plus the signal number after cleanup.
+		exit = 128 + int(sig.(syscall.Signal))
+	}
 
 	// Mark as shutting down so readiness probes fail immediately.
 	srv.SetShuttingDown()
@@ -63,4 +84,5 @@ func main() {
 	}
 
 	log.Println("server stopped")
+	return exit
 }

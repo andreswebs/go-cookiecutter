@@ -28,6 +28,11 @@ if PROJECT_TYPE == "cli":
     rmtree("api-spec")
 else:  # api
     rmtree(os.path.join("src", "cmd", PROJECT_NAME))
+    # The CLI machinery (delegate, typed errors, output contract) is CLI-only;
+    # the API keeps internal/secret, which is shape-agnostic.
+    rmtree("src/internal/command")
+    rmtree("src/internal/output")
+    rmtree("src/internal/terr")
     # The signed binary-release pipeline is CLI-only.
     rm(".github/workflows/release.yml")
     rmtree(".github/actions")

@@ -25,7 +25,7 @@ func TestNewPanicsOnDuplicateCode(t *testing.T) {
 			t.Fatal("New with a duplicate code did not panic")
 		}
 	}()
-	terr.New("test_sentinel", 70, "", "duplicate")
+	_ = terr.New("test_sentinel", 70, "", "duplicate")
 }
 
 func TestNewfDoesNotRegister(t *testing.T) {

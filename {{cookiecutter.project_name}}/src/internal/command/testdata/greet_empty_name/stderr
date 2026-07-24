@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":false,"error":{"code":"empty_name","message":"name must not be empty","hint":"pass a non-empty name, or no argument for the default"}}

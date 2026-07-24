@@ -1,0 +1,1 @@
+{"schema_version":1,"ok":false,"error":{"code":"no_command","message":"no command specified","hint":"run '{{ cookiecutter.project_name }} --help' for available commands"}}

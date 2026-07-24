@@ -36,7 +36,55 @@ considering the task complete. It enforces the full quality gate:
 If `make build` fails at any step, fix the issue before proceeding. Do not
 silence lint errors with `_ =` — handle them properly (return, log, or assert in
 a test).
+{% if cookiecutter.project_type == 'cli' %}
+## Architecture & contract
 
+The tool is agent-first: stdout carries exactly one machine-readable JSON
+result envelope, stderr carries the JSON error envelope, NDJSON warnings, and
+diagnostics, and exit codes are part of the contract.
+{%- if cookiecutter.include_specs %} The ADRs under `docs/adr/` are the
+authoritative rules; read them before changing the CLI surface.
+{%- endif %}
+
+| Package            | Role                                                                                   |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `cmd/{{ cookiecutter.project_name }}` | One-line `main`: hands args and streams to the delegate, never inspects errors |
+| `internal/command` | The CLI surface. Contract in `run.go` (`Run(args, deps) int`, the exit boundary); framework interior in `root.go`, `commands.go`, `usage.go` |
+| `internal/output`  | Result envelope head, error envelope, NDJSON warnings                                   |
+| `internal/terr`    | Typed, coded errors: stable code, exit code, hint; enumerable registry                  |
+| `internal/secret`  | Redaction type for credentials (`secret.Value`, raw access only via `Reveal()`)         |
+| `internal/version` | Build version, stamped via `-ldflags -X`                                                |
+
+Rules that tests enforce:
+
+- Every exit code the tool can produce is declared in
+  `internal/command/registry.go`; the golden harness asserts real exits stay
+  inside the registry and that every declared code is exercised.
+- Coded errors are immutable sentinels in `internal/command/errors.go`, each
+  documenting why it carries its exit code. Attach context with `Wrap` or
+  `WithDetails` (both copy). Unclassified errors surface as `internal_error`,
+  exit 70.
+- The CLI framework (`urfave/cli/v3`) is imported only inside
+  `internal/command` and never appears in an exported identifier. The
+  framework's own printing and exiting are neutralized in `root.go`.
+
+To add a command: declare it in `commands.go`, register it in `subcommands()`
+(the `schema` command self-describes from that declaration), add its envelope
+to `internal/output/envelopes.go` (open with `output.Head`; coalesce nil
+collections in `MarshalJSON`), add sentinels for its failures, extend the
+registry if a new exit code appears, then add golden scenarios and run:
+
+```sh
+cd src && go test ./internal/command -update
+```
+
+Review the golden diff like any other code change; it is the contract's
+evidence. Logging is deliberately absent (silent posture): this scaffold is a
+single-shot computational tool, and coded errors are the failure channel.
+Adopt a leveled `slog` logger only when the tool talks to external systems or
+runs long{% if cookiecutter.include_specs %} (see
+`docs/adr/0004-logging.md`){% endif %}.
+{% endif %}
 ## Releases & supply-chain security
 
 {% if cookiecutter.project_type == 'cli' -%}

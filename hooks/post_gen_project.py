@@ -38,6 +38,10 @@ if not CONTAINERIZED:
     rm(".dockerignore")
     rm(".github/workflows/docker.yml")
 
+{% if not cookiecutter.include_specs -%}
+rmtree("docs")
+{%- endif %}
+
 os.rename(".gitignore.tmp", ".gitignore")
 
 # Initialize the module, then tidy so go.mod/go.sum reflect the selected shape

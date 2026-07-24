@@ -14,6 +14,9 @@ Both shapes share:
 - A `CI` workflow that runs the full `make build` gate on push and pull request.
 - Third-party GitHub Actions pinned by commit SHA, kept current by Dependabot.
 - An `AGENTS.md` (symlinked to `CLAUDE.md`) describing the build and release flow.
+- A `docs/` tree for spec-driven development (`docs/adr/` seeded with the
+  family-wide exit-code taxonomy ADR, plus an empty `docs/specs/`); optional,
+  see `include_specs`.
 
 The `cli` shape adds:
 
@@ -49,6 +52,7 @@ Containers are always generated for the `api` shape and are optional for the
 | `author_handle`             | Author handle (e.g. `@you`).                                                |
 | `author_id`                 | Handle without the `@`; used in the module path and image name. Derived.    |
 | `author_link`               | Author profile URL.                                                         |
+| `include_specs`             | Include the `docs/` tree (`docs/adr/`, `docs/specs/`). Default `true`.      |
 | `git_init`                  | Run `git init` after generating.                                            |
 
 ## Pre-requisites

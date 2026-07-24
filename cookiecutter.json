@@ -9,6 +9,7 @@
   "author_handle": "",
   "author_id": "{{ cookiecutter.author_handle.replace('@', '') }}",
   "author_link": "",
+  "include_specs": true,
   "git_init": true,
   "_copy_without_render": [".github/actions/gh-release/action.yml"],
   "__prompts__": {
@@ -25,6 +26,7 @@
     "author_name": "Author full name",
     "author_handle": "Author handle (e.g. @you)",
     "author_link": "Author profile URL",
+    "include_specs": "Include the docs/ tree (ADRs and specs) for spec-driven development?",
     "git_init": "Run 'git init' after generating?"
   }
 }
